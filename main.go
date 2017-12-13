@@ -1,56 +1,66 @@
 package main
 
 import (
-	"fmt"
-	"time" 
-	"net/http"
-	"io/ioutil"
 	"container/ring"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"runtime"
+	"time"
 )
+
 var tr, client = &http.Transport{
 	MaxIdleConns:       10,
-	IdleConnTimeout:    30 * time.Second,
+	IdleConnTimeout:    300 * time.Second,
 	DisableCompression: true,
 }, &http.Client{Transport: tr}
 
 var hosts *ring.Ring
 
 func main() {
-
-	http.HandleFunc("/", proxy)
-	http.ListenAndServe(":9000", nil)
-	
-	proxied := []string{"http://www.corriere.it/", "http://www.repubblica.it/"}
+	runtime.GOMAXPROCS(2)
+	proxied := []string{"http://ibmcollib01:7800", "http://ibmcollib02:7800"}
 	hosts = ring.New(len(proxied))
 	for index := 0; index < hosts.Len(); index++ {
 		hosts.Value = proxied[index]
 		hosts = hosts.Next()
 	}
 
+	http.HandleFunc("/", proxy)
+	http.ListenAndServe(":9000", nil)
+
 }
 
-func proxy (resp http.ResponseWriter, req *http.Request) {
+func proxy(resp http.ResponseWriter, req *http.Request) {
+	iter := 0
+	ttl := hosts.Len()
 
-	request, err := http.NewRequest(req.Method, getNextHost(hosts) +req.RequestURI, req.Body)
-	request.Header = req.Header
-
-	time.Sleep(10);
-
-	res, err := client.Do(request)
+	req.Host = ""
+	u, err := url.Parse(getNextHost())
+	req.URL = u
+	req.URL.Path = req.RequestURI
+	req.RequestURI = ""
+	res, err := client.Do(req)
+	iter++
 	if err != nil {
-        panic(err)
-    }
-	fmt.Printf("%s\n%#v\n", req.URL, res)
+		panic(err)
+	}
+	fmt.Printf("%s %s %d\n", req.URL.Host, req.URL.Path, res.StatusCode)
+	for res.StatusCode == 404 && iter < ttl {
+		res, err = client.Do(req)
+		iter++
+	}
 	resdata, err := ioutil.ReadAll(res.Body)
-	for name, headers := range res.Header {
-		for _, h := range headers {
-			resp.Header().Set(name, h)
+	for name, header := range res.Header {
+		for _, val := range header {
+			resp.Header().Set(name, val)
 		}
 	}
 	resp.Write(resdata)
 }
 
-func getNextHost(r *ring.Ring)  (host string){
-	r = r.Next()
-	return r.Value.(string)
+func getNextHost() (host string) {
+	hosts = hosts.Next()
+	return hosts.Value.(string)
 }
