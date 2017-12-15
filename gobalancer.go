@@ -14,22 +14,17 @@ var tr, client = &http.Transport{
 	DisableCompression: true,
 }, &http.Client{Transport: tr, Timeout: 60 * time.Second}
 
-var b *Backend
-
-func main() {
-	b = NewBackend("", "http://ibmcollib01:7800", "http://ibmcollib02:7800")
-
-	http.HandleFunc("/", proxy)
-	http.ListenAndServe(":9000", nil)
+type proxy struct {
+	Backend *Backend
 }
 
-func proxy(resp http.ResponseWriter, req *http.Request) {
+func (b *proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	var err error
-	iter, repeat, ttl, path := 0, true, b.hosts.Len(), req.RequestURI
+	iter, repeat, ttl, path := 0, true, b.Backend.hosts.Len(), req.RequestURI
 
 	for repeat && iter < ttl {
 		iter++
-		req.URL, err = url.Parse(b.Next())
+		req.URL, err = url.Parse(b.Backend.Next())
 		req.URL.Path = path
 		req.RequestURI = ""
 		req.Host = ""
@@ -61,4 +56,11 @@ func proxy(resp http.ResponseWriter, req *http.Request) {
 		}
 
 	}
+}
+
+func main() {
+	b := NewBackend("", "http://ibmcollib01:7800", "http://ibmcollib02:7800")
+
+	http.HandleFunc("/", proxy{Backend: b})
+	http.ListenAndServe(":9000", nil)
 }
