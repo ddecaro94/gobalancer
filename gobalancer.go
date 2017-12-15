@@ -1,13 +1,10 @@
 package main
 
 import (
-	"container/ring"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"runtime"
-	"sync"
 	"time"
 )
 
@@ -15,34 +12,24 @@ var tr, client = &http.Transport{
 	MaxIdleConns:       10,
 	IdleConnTimeout:    300 * time.Second,
 	DisableCompression: true,
-}, &http.Client{Transport: tr}
+}, &http.Client{Transport: tr, Timeout: 60 * time.Second}
 
-var hosts *ring.Ring
-var l int
-var mutex = &sync.Mutex{}
+var b *Backend
 
 func main() {
-	runtime.GOMAXPROCS(2)
-	proxied := []string{"http://ibmcollib01:7800", "http://ibmcollib02:7800"}
-	hosts = ring.New(len(proxied))
-	for index := 0; index < hosts.Len(); index++ {
-		hosts.Value = proxied[index]
-		hosts = hosts.Next()
-	}
-	l = hosts.Len()
+	b = NewBackend("", "http://ibmcollib01:7800", "http://ibmcollib02:7800")
 
 	http.HandleFunc("/", proxy)
 	http.ListenAndServe(":9000", nil)
-
 }
 
 func proxy(resp http.ResponseWriter, req *http.Request) {
 	var err error
-	iter, repeat, ttl, path := 0, true, l, req.RequestURI
+	iter, repeat, ttl, path := 0, true, b.hosts.Len(), req.RequestURI
 
 	for repeat && iter < ttl {
 		iter++
-		req.URL, err = url.Parse(getNextHost())
+		req.URL, err = url.Parse(b.Next())
 		req.URL.Path = path
 		req.RequestURI = ""
 		req.Host = ""
@@ -74,11 +61,4 @@ func proxy(resp http.ResponseWriter, req *http.Request) {
 		}
 
 	}
-}
-
-func getNextHost() (host string) {
-	mutex.Lock()
-	hosts = hosts.Next()
-	defer mutex.Unlock()
-	return hosts.Value.(string)
 }
