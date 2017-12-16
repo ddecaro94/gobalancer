@@ -39,9 +39,11 @@ func (p proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 				panic("No valid host found for service " + req.URL.Path)
 			}
 		case res.StatusCode == 404:
+			defer res.Body.Close()
 			fmt.Printf("Calling %s %s, received %d\n", req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = true
 		default:
+			defer res.Body.Close()
 			fmt.Printf("Calling %s %s, received %d\n", req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = false
 			for name, header := range res.Header {
@@ -60,7 +62,7 @@ func (p proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	b := NewBackend("", "http://ibmcollib01:7800", "http://ibmcollib02:7800")
+	b := NewBackend("", "http://www.amazon.it:80", "http://www.facebook.com:80")
 	http.Handle("/", proxy{b})
 	http.ListenAndServe(":9000", nil)
 }
