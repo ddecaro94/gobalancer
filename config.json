@@ -1,0 +1,31 @@
+{
+    "frontends": [
+        {
+            "name" : "main",
+            "listen" : ":9000",
+            "tls" : false,
+            "pool" : "pool1",
+            "bounce" : [404],
+            "logfile" : "F:\\Data\\Documents\\Progetti\\gologs"
+        }
+    ],
+    "pools" : [
+        {
+            "name" : "pool1",
+            "servers" : [
+                {
+                    "name" : "server1",
+                    "scheme" : "http",
+                    "host" : "www.amazon.it",
+                    "port" : 80
+                },
+                {
+                    "name" : "server2",
+                    "scheme" : "http",
+                    "host" : "www.facebook.it",
+                    "port" : 80
+                }
+            ] 
+        }
+    ]
+}

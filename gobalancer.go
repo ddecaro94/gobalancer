@@ -1,23 +1,50 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"time"
 )
+
+type proxy struct {
+	Backend *Backend
+}
+
+type frontend struct {
+	Name    string
+	Listen  string
+	TLS     bool
+	Pool    string
+	Bounce  []int
+	Logfile string
+}
+
+type server struct {
+	Name   string
+	Scheme string
+	Host   string
+	Port   int
+}
+type pool struct {
+	Name    string   `json:"name"`
+	Servers []server `json:"servers"`
+}
+
+//Config for the main program
+type Config struct {
+	Frontends []frontend `json:"frontends"`
+	Pools     []pool     `json:"pools"`
+}
 
 var tr, client = &http.Transport{
 	MaxIdleConns:       10,
 	IdleConnTimeout:    300 * time.Second,
 	DisableCompression: true,
 }, &http.Client{Transport: tr, Timeout: 60 * time.Second}
-
-
-type proxy struct{
-	Backend *Backend
-}
 
 func (p proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	var err error
@@ -62,7 +89,23 @@ func (p proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	b := NewBackend("", "http://www.amazon.it:80", "http://www.facebook.com:80")
+
+	var config Config
+	file, e := ioutil.ReadFile("./config.json")
+	if e != nil {
+		panic(e)
+	}
+
+	if err := json.Unmarshal(file, &config); err != nil {
+		panic(err)
+	}
+
+	b, err := NewBackend("roundrobin", "http://www.amazon.it:80", "http://www.facebook.com:80")
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("%+v", config)
 	http.Handle("/", proxy{b})
 	http.ListenAndServe(":9000", nil)
 }

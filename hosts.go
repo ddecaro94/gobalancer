@@ -2,6 +2,7 @@ package main
 
 import (
 	"container/ring"
+	"net/url"
 	"sync"
 )
 
@@ -20,13 +21,23 @@ func (b *Backend) Next() (host string) {
 }
 
 //NewBackend returns a setof servers using the balancing algorithm
-func NewBackend(algorithm string, hosts ...string) *Backend {
+func NewBackend(algorithm string, hosts ...string) (*Backend, error) {
+	var err error
 	b := &Backend{}
-	b.hosts = ring.New(len(hosts))
 	b.mutex = &sync.Mutex{}
-	for _, host := range hosts {
-		b.hosts.Value = host
-		b.hosts = b.hosts.Next()
+	switch algorithm {
+	case "roundrobin":
+		b.hosts = ring.New(len(hosts))
+		for _, host := range hosts {
+			b.hosts.Value, err = url.Parse(host)
+			if err != nil {
+				return nil, err
+			}
+			b.hosts = b.hosts.Next()
+		}
+		return b, nil
+	default:
+		return nil, err
 	}
-	return b
+
 }
