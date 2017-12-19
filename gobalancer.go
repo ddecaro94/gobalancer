@@ -1,43 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
-	"net/url"
 	"time"
 )
 
 type proxy struct {
-	Backend *Backend
-}
-
-type frontend struct {
-	Name    string
-	Listen  string
-	TLS     bool
-	Pool    string
-	Bounce  []int
-	Logfile string
-}
-
-type server struct {
-	Name   string
-	Scheme string
-	Host   string
-	Port   int
-}
-type pool struct {
-	Name    string   `json:"name"`
-	Servers []server `json:"servers"`
-}
-
-//Config for the main program
-type Config struct {
-	Frontends []frontend `json:"frontends"`
-	Pools     []pool     `json:"pools"`
+	Frontend *Frontend
+	Backend  *Backend
 }
 
 var tr, client = &http.Transport{
@@ -47,12 +19,11 @@ var tr, client = &http.Transport{
 }, &http.Client{Transport: tr, Timeout: 60 * time.Second}
 
 func (p proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	var err error
-	iter, repeat, ttl, path := 0, true, p.Backend.hosts.Len(), req.RequestURI
+	iter, repeat, ttl, path := 0, true, p.Backend.len, req.RequestURI
 
 	for repeat && iter < ttl {
 		iter++
-		req.URL, err = url.Parse(p.Backend.Next())
+		req.URL = p.Backend.Next()
 		req.URL.Path = path
 		req.RequestURI = ""
 		req.Host = ""
@@ -62,50 +33,56 @@ func (p proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		case httperr != nil:
 			repeat = true
 			fmt.Printf("Calling %s %s, error: %s - redirecting\n", req.URL.Host, req.URL.Path, httperr.Error())
-			if iter < ttl {
-				panic("No valid host found for service " + req.URL.Path)
+			if iter >= ttl {
+				fmt.Printf("No valid host found for service: %s ", req.URL.Path)
+				http.Error(resp, "Service Unavailable", 503)
 			}
-		case res.StatusCode == 404:
+		case codeToBounce(res.StatusCode, p.Frontend.Bounce):
 			defer res.Body.Close()
 			fmt.Printf("Calling %s %s, received %d\n", req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = true
+			if iter < ttl {
+				forward(resp, res)
+			}
 		default:
 			defer res.Body.Close()
 			fmt.Printf("Calling %s %s, received %d\n", req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = false
-			for name, header := range res.Header {
-				for _, val := range header {
-					resp.Header().Set(name, val)
-				}
-			}
-			_, err = io.Copy(resp, res.Body)
-			if err != nil {
-				panic(err)
-			}
-
+			forward(resp, res)
 		}
+	}
+}
 
+func forward(w http.ResponseWriter, res *http.Response) {
+	for name, header := range res.Header {
+		for _, val := range header {
+			w.Header().Set(name, val)
+		}
+	}
+	_, err := io.Copy(w, res.Body)
+	if err != nil {
+		panic(err)
 	}
 }
 
 func main() {
 
-	var config Config
-	file, e := ioutil.ReadFile("./config.json")
-	if e != nil {
-		panic(e)
-	}
-
-	if err := json.Unmarshal(file, &config); err != nil {
-		panic(err)
-	}
-
-	b, err := NewBackend("roundrobin", "http://www.amazon.it:80", "http://www.facebook.com:80")
+	config, err := ReadConfig("./config.json")
 	if err != nil {
 		panic(err)
 	}
-
+	frontend, cluster := config.Frontends["main"], config.Clusters["pool1"]
+	b := NewBackend(cluster)
 	fmt.Printf("%+v", config)
-	http.Handle("/", proxy{b})
-	http.ListenAndServe(":9000", nil)
+
+	http.ListenAndServe(":9000", proxy{&frontend, b})
+}
+
+func codeToBounce(code int, list []int) bool {
+	for _, bounced := range list {
+		if bounced == code {
+			return true
+		}
+	}
+	return false
 }

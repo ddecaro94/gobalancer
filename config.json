@@ -1,6 +1,6 @@
 {
-    "frontends": [
-        {
+    "frontends": {
+        "main": {
             "name" : "main",
             "listen" : ":9000",
             "tls" : false,
@@ -8,24 +8,24 @@
             "bounce" : [404],
             "logfile" : "F:\\Data\\Documents\\Progetti\\gologs"
         }
-    ],
-    "pools" : [
-        {
-            "name" : "pool1",
+    }
+    ,
+    "clusters" : {
+        "pool1":{
+            "algorithm" : "roundrobin",
+            "size" : 2,
             "servers" : [
                 {
                     "name" : "server1",
-                    "scheme" : "http",
-                    "host" : "www.amazon.it",
-                    "port" : 80
+                    "scheme" : "https",
+                    "host" : "www.amazon.it"
                 },
                 {
                     "name" : "server2",
-                    "scheme" : "http",
-                    "host" : "www.facebook.it",
-                    "port" : 80
+                    "scheme" : "https",
+                    "host" : "www.facebook.com"
                 }
             ] 
         }
-    ]
+    }
 }
