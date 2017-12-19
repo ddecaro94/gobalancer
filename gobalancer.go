@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	//"github.com/ddecaro/gobalancer/api"
 )
 
 type proxy struct {
@@ -41,6 +42,7 @@ func (p *proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			if iter >= ttl {
 				fmt.Printf("No valid host found for service: %s ", req.URL.Path)
 				http.Error(resp, "Service Unavailable", 503)
+				return
 			}
 		case codeToBounce(res.StatusCode, p.Frontend.Bounce):
 			defer res.Body.Close()
@@ -73,13 +75,16 @@ func forward(w http.ResponseWriter, res *http.Response) {
 func main() {
 
 	config, err := ReadConfig("./config.json")
+	servers := make(map[string]*http.Server)
+
 	if err != nil {
 		panic(err)
 	}
 	for _, frontend := range config.Frontends {
 		go func() {
 			cluster := config.Clusters[frontend.Pool]
-			err := http.ListenAndServe(frontend.Listen, &proxy{0, &sync.Mutex{}, &frontend, &cluster})
+			servers[frontend.Name] = &http.Server{Addr: frontend.Listen, Handler: &proxy{0, &sync.Mutex{}, &frontend, &cluster}}
+			err := servers[frontend.Name].ListenAndServe()
 			if err != nil {
 				panic(err)
 			} else {
@@ -89,8 +94,9 @@ func main() {
 	}
 	//frontend, cluster := config.Frontends["main"], config.Clusters["pool1"]
 	//b := NewBackend(cluster)
-	fmt.Printf("%+v", config)
+	//fmt.Printf("%+v", config)
 
+	http.Handle("/", api.APIServer{config})
 	http.ListenAndServe(":9898", nil)
 }
 
