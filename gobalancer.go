@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/ddecaro94/gobalancer/api"
+	"github.com/ddecaro94/gobalancer/config"
 )
 
 type proxy struct {
 	index    int
 	mutex    *sync.Mutex
-	Frontend *Frontend
-	Cluster  *Cluster
+	Frontend *config.Frontend
+	Cluster  *config.Cluster
 }
 
 var tr, client = &http.Transport{
@@ -75,12 +76,14 @@ func forward(w http.ResponseWriter, res *http.Response) {
 
 func main() {
 
-	config, err := ReadConfig("./config.json")
-	servers := make(map[string]*http.Server)
-
+	config, err := config.ReadConfig("./config.json")
 	if err != nil {
 		panic(err)
 	}
+
+	servers := make(map[string]*http.Server)
+	manager := api.NewManager(config)
+
 	for _, frontend := range config.Frontends {
 		go func() {
 			cluster := config.Clusters[frontend.Pool]
@@ -93,12 +96,8 @@ func main() {
 			}
 		}()
 	}
-	//frontend, cluster := config.Frontends["main"], config.Clusters["pool1"]
-	//b := NewBackend(cluster)
-	//fmt.Printf("%+v", config)
 
-	http.Handle("/", api.APIServer{config})
-	http.ListenAndServe(":9898", nil)
+	manager.Start()
 }
 
 func codeToBounce(code int, list []int) bool {
@@ -111,7 +110,7 @@ func codeToBounce(code int, list []int) bool {
 }
 
 //Next returns the next address according to the balancing algorithm
-func (p *proxy) Next() (server Server) {
+func (p *proxy) Next() (server config.Server) {
 	p.mutex.Lock()
 	switch p.Cluster.Algorithm {
 	case "roundrobin":
