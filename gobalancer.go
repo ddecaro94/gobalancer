@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 )
 
 type proxy struct {
+	index    int
+	mutex    *sync.Mutex
 	Frontend *Frontend
-	Backend  *Backend
+	Cluster  *Cluster
 }
 
 var tr, client = &http.Transport{
@@ -18,12 +21,14 @@ var tr, client = &http.Transport{
 	DisableCompression: true,
 }, &http.Client{Transport: tr, Timeout: 60 * time.Second}
 
-func (p proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	iter, repeat, ttl, path := 0, true, p.Backend.len, req.RequestURI
+func (p *proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	iter, repeat, ttl, path := 0, true, p.Cluster.Size, req.RequestURI
 
 	for repeat && iter < ttl {
 		iter++
-		req.URL = p.Backend.Next()
+		server := p.Next()
+		req.URL.Host = server.Host
+		req.URL.Scheme = server.Scheme
 		req.URL.Path = path
 		req.RequestURI = ""
 		req.Host = ""
@@ -71,11 +76,22 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	frontend, cluster := config.Frontends["main"], config.Clusters["pool1"]
-	b := NewBackend(cluster)
+	for _, frontend := range config.Frontends {
+		go func() {
+			cluster := config.Clusters[frontend.Pool]
+			err := http.ListenAndServe(frontend.Listen, &proxy{0, &sync.Mutex{}, &frontend, &cluster})
+			if err != nil {
+				panic(err)
+			} else {
+				fmt.Printf("Listening on %s, frontend %+v, cluster %+v", frontend.Listen, frontend, cluster)
+			}
+		}()
+	}
+	//frontend, cluster := config.Frontends["main"], config.Clusters["pool1"]
+	//b := NewBackend(cluster)
 	fmt.Printf("%+v", config)
 
-	http.ListenAndServe(":9000", proxy{&frontend, b})
+	http.ListenAndServe(":9898", nil)
 }
 
 func codeToBounce(code int, list []int) bool {
@@ -85,4 +101,15 @@ func codeToBounce(code int, list []int) bool {
 		}
 	}
 	return false
+}
+
+//Next returns the next address according to the balancing algorithm
+func (p *proxy) Next() (server Server) {
+	p.mutex.Lock()
+	switch p.Cluster.Algorithm {
+	case "roundrobin":
+		p.index = (p.index + 1) % p.Cluster.Size
+	}
+	defer p.mutex.Unlock()
+	return p.Cluster.Servers[p.index]
 }
