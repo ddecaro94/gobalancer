@@ -6,7 +6,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
-	//"github.com/ddecaro/gobalancer/api"
+
+	"github.com/ddecaro94/gobalancer/api"
 )
 
 type proxy struct {
