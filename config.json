@@ -18,7 +18,7 @@
                 {
                     "name" : "server1",
                     "scheme" : "https",
-                    "host" : "www.amazon.it"
+                    "host" : "www.google.it"
                 },
                 {
                     "name" : "server2",

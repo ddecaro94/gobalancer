@@ -7,6 +7,7 @@ import (
 
 //Config for the main program
 type Config struct {
+	file      string
 	Frontends map[string]Frontend `json:"frontends"`
 	Clusters  map[string]Cluster  `json:"clusters"`
 }
@@ -46,5 +47,18 @@ func ReadConfig(path string) (c *Config, err error) {
 	if err := json.Unmarshal(file, &config); err != nil {
 		return nil, err
 	}
+	config.file = path
 	return &config, nil
+}
+
+//Reload reloads config file
+func (c *Config) Reload() (err error) {
+	new, err := ReadConfig(c.file)
+	if err != nil {
+		return err
+	}
+
+	c.Frontends = new.Frontends
+	c.Clusters = new.Clusters
+	return nil
 }

@@ -14,8 +14,8 @@ import (
 type proxy struct {
 	index    int
 	mutex    *sync.Mutex
-	Frontend *config.Frontend
-	Cluster  *config.Cluster
+	conf     *config.Config
+	frontend string
 }
 
 var tr, client = &http.Transport{
@@ -25,7 +25,7 @@ var tr, client = &http.Transport{
 }, &http.Client{Transport: tr, Timeout: 60 * time.Second}
 
 func (p *proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	iter, repeat, ttl, path := 0, true, p.Cluster.Size, req.RequestURI
+	iter, repeat, ttl, path := 0, true, p.conf.Clusters[p.conf.Frontends[p.frontend].Pool].Size, req.RequestURI
 
 	for repeat && iter < ttl {
 		iter++
@@ -46,7 +46,7 @@ func (p *proxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 				http.Error(resp, "Service Unavailable", 503)
 				return
 			}
-		case codeToBounce(res.StatusCode, p.Frontend.Bounce):
+		case codeToBounce(res.StatusCode, p.conf.Frontends[p.frontend].Bounce):
 			defer res.Body.Close()
 			fmt.Printf("Calling %s %s, received %d\n", req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = true
@@ -76,25 +76,25 @@ func forward(w http.ResponseWriter, res *http.Response) {
 
 func main() {
 
-	config, err := config.ReadConfig("./config.json")
+	c, err := config.ReadConfig("./config.json")
 	if err != nil {
 		panic(err)
 	}
 
 	servers := make(map[string]*http.Server)
-	manager := api.NewManager(config)
+	manager := api.NewManager(c)
 
-	for _, frontend := range config.Frontends {
-		go func() {
-			cluster := config.Clusters[frontend.Pool]
-			servers[frontend.Name] = &http.Server{Addr: frontend.Listen, Handler: &proxy{0, &sync.Mutex{}, &frontend, &cluster}}
+	for _, frontend := range c.Frontends {
+		go func(frontend config.Frontend) {
+			cluster := c.Clusters[frontend.Pool]
+			servers[frontend.Name] = &http.Server{Addr: frontend.Listen, Handler: &proxy{0, &sync.Mutex{}, c, frontend.Name}}
 			err := servers[frontend.Name].ListenAndServe()
 			if err != nil {
 				panic(err)
 			} else {
 				fmt.Printf("Listening on %s, frontend %+v, cluster %+v", frontend.Listen, frontend, cluster)
 			}
-		}()
+		}(frontend)
 	}
 
 	manager.Start()
@@ -111,11 +111,12 @@ func codeToBounce(code int, list []int) bool {
 
 //Next returns the next address according to the balancing algorithm
 func (p *proxy) Next() (server config.Server) {
+	cluster := p.conf.Clusters[p.conf.Frontends[p.frontend].Pool]
 	p.mutex.Lock()
-	switch p.Cluster.Algorithm {
+	switch cluster.Algorithm {
 	case "roundrobin":
-		p.index = (p.index + 1) % p.Cluster.Size
+		p.index = (p.index + 1) % cluster.Size
 	}
 	defer p.mutex.Unlock()
-	return p.Cluster.Servers[p.index]
+	return cluster.Servers[p.index]
 }
