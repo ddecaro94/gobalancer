@@ -17,7 +17,7 @@ var tr, client = &http.Transport{
 	MaxIdleConns:       10,
 	IdleConnTimeout:    300 * time.Second,
 	DisableCompression: true,
-}, &http.Client{Transport: tr, Timeout: 60 * time.Second}
+}, &http.Client{Transport: tr, Timeout: 600 * time.Second}
 
 //A Balancer stores structures used to compute the host to be used at runtime
 type Balancer struct {
