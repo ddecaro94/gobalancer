@@ -27,7 +27,7 @@ type Server struct {
 	Name   string `json:"name"`
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
-	Port   int    `json:"port"`
+	Port   string `json:"port"`
 }
 
 //A Cluster aggregates more Servers into a pool
@@ -60,5 +60,30 @@ func (c *Config) Reload() (err error) {
 
 	c.Frontends = new.Frontends
 	c.Clusters = new.Clusters
+	for name := range new.Clusters {
+		c.Clusters[name] = new.Clusters[name]
+	}
+
 	return nil
+}
+
+//Add server to the cluster
+func (c *Cluster) Add(s Server) (result bool) {
+	c.Servers = append(c.Servers, s)
+	c.Size++
+	return true
+}
+
+//Update server in the cluster
+func (c *Cluster) Update(s Server) (updated int) {
+	count := 0
+	for _, server := range c.Servers {
+		if server.Name == s.Name {
+			server.Host = s.Host
+			server.Port = s.Port
+			server.Scheme = s.Scheme
+			count++
+		}
+	}
+	return count
 }
