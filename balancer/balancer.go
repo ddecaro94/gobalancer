@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -17,7 +18,9 @@ var tr, client = &http.Transport{
 	MaxIdleConns:       10,
 	IdleConnTimeout:    300 * time.Second,
 	DisableCompression: true,
-}, &http.Client{Transport: tr, Timeout: 600 * time.Second}
+}, &http.Client{Transport: tr, Timeout: 120 * time.Second}
+
+var random = rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
 
 //A Balancer stores structures used to compute the host to be used at runtime
 type Balancer struct {
@@ -34,7 +37,7 @@ func New(c *config.Config, frontend string) (p *Balancer) {
 }
 
 func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	iter, repeat, ttl, path, body := 0, true, p.conf.Clusters[p.conf.Frontends[p.frontend].Pool].Size, req.RequestURI, []byte{}
+	iter, repeat, ttl, path, body := 0, true, len(p.conf.Clusters[p.conf.Frontends[p.frontend].Pool].Servers), req.RequestURI, []byte{}
 	reqID, err := uuid.NewUUID()
 	forbidden := make(map[string]bool)
 	bouncedCodes := p.conf.Frontends[p.frontend].Bounce
@@ -98,7 +101,10 @@ func (p *Balancer) Next() (server config.Server) {
 	p.mutex.Lock()
 	switch cluster.Algorithm {
 	case "roundrobin":
-		p.index = (p.index + 1) % cluster.Size
+		p.index = (p.index + 1) % len(cluster.Servers)
+
+	case "weighted":
+		p.index = getWeightedIndex(cluster)
 	}
 	defer p.mutex.Unlock()
 	return cluster.Servers[p.index]
@@ -123,4 +129,15 @@ func forward(w http.ResponseWriter, res *http.Response) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func getWeightedIndex(cluster config.Cluster) (index int) {
+	r := random.Intn(cluster.CDF)
+	for i, s := range cluster.Servers {
+		r -= s.Weight
+		if r <= 0 {
+			return i
+		}
+	}
+	return -1
 }

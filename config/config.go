@@ -15,6 +15,7 @@ type Config struct {
 //A Frontend is the proxy interface
 type Frontend struct {
 	Name    string `json:"name"`
+	Active  bool   `json:"active"`
 	Listen  string `json:"listen"`
 	TLS     bool   `json:"tls"`
 	Pool    string `json:"pool"`
@@ -28,12 +29,13 @@ type Server struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 	Port   string `json:"port"`
+	Weight int    `json:"weight"`
 }
 
 //A Cluster aggregates more Servers into a pool
 type Cluster struct {
 	Algorithm string   `json:"algorithm"`
-	Size      int      `json:"size"`
+	CDF       int      //cumulative density function (sum of weights)
 	Servers   []Server `json:"servers"`
 }
 
@@ -48,6 +50,14 @@ func ReadConfig(path string) (c *Config, err error) {
 		return nil, err
 	}
 	config.file = path
+	cdf := 0
+	for key, cluster := range config.Clusters {
+		for _, server := range cluster.Servers {
+			cdf += server.Weight
+		}
+		cluster.CDF = cdf
+		config.Clusters[key] = cluster
+	}
 	return &config, nil
 }
 
@@ -70,7 +80,7 @@ func (c *Config) Reload() (err error) {
 //Add server to the cluster
 func (c *Cluster) Add(s Server) (result bool) {
 	c.Servers = append(c.Servers, s)
-	c.Size++
+	c.CDF += s.Weight
 	return true
 }
 
@@ -82,8 +92,15 @@ func (c *Cluster) Update(s Server) (updated int) {
 			server.Host = s.Host
 			server.Port = s.Port
 			server.Scheme = s.Scheme
+			server.Weight = s.Weight
+			c.CDF = c.CDF - server.Weight + s.Weight
 			count++
 		}
 	}
 	return count
+}
+
+//SetCDF sets the cumulative density function
+func (c *Cluster) SetCDF(cdf int) {
+	c.CDF = cdf
 }
