@@ -2,13 +2,14 @@ package balancer
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/ddecaro94/gobalancer/config"
 	"github.com/google/uuid"
@@ -27,12 +28,13 @@ type Balancer struct {
 	index    int
 	mutex    *sync.Mutex
 	conf     *config.Config
+	logger   *zap.Logger
 	frontend string
 }
 
 //New returns a Balancer instance
-func New(c *config.Config, frontend string) (p *Balancer) {
-	b := &Balancer{0, &sync.Mutex{}, c, frontend}
+func New(c *config.Config, logger *zap.Logger, frontend string) (p *Balancer) {
+	b := &Balancer{0, &sync.Mutex{}, c, logger, frontend}
 	return b
 }
 
@@ -70,16 +72,39 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		switch {
 
 		case httperr != nil:
-			fmt.Printf("%s - %s - Calling %s %s, error: %s - redirecting\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, httperr.Error())
+			p.logger.Warn("Error calling service",
+				zap.String("reqID", reqID.String()),
+				zap.String("from", req.RemoteAddr),
+				zap.String("method", req.Method),
+				zap.String("host", req.URL.Host),
+				zap.String("path", req.URL.Path),
+				zap.String("error", httperr.Error()),
+			)
+			//fmt.Printf("%s - %s - Calling %s %s, error: %s - redirecting\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, httperr.Error())
 			repeat = true
 			//add url to forbidden
 			forbidden[host] = true
 			if iter >= ttl {
-				fmt.Printf("%s - %s - No valid host found for service: %s \n", req.RemoteAddr, reqID, req.URL.Path)
+				p.logger.Error("No valid host found for service",
+					zap.String("reqID", reqID.String()),
+					zap.String("from", req.RemoteAddr),
+					zap.String("method", req.Method),
+					zap.String("host", req.URL.Host),
+					zap.String("path", req.URL.Path),
+				)
+				//fmt.Printf("%s - %s - No valid host found for service: %s \n", req.RemoteAddr, reqID, req.URL.Path)
 				http.Error(resp, "Service Unavailable", 503)
 			}
 		case codeToBounce(res.StatusCode, p.conf.Frontends[p.frontend].Bounce):
-			fmt.Printf("%s - %s - Calling %s %s, received %d\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, res.StatusCode)
+			p.logger.Warn("Received error code - retrying",
+				zap.String("reqID", reqID.String()),
+				zap.String("from", req.RemoteAddr),
+				zap.String("method", req.Method),
+				zap.String("host", req.URL.Host),
+				zap.String("path", req.URL.Path),
+				zap.Int("code", res.StatusCode),
+			)
+			//fmt.Printf("%s - %s - Calling %s %s, received %d\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = true
 			forbidden[host] = true
 			if iter >= ttl {
@@ -87,7 +112,15 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 				defer res.Body.Close()
 			}
 		default:
-			fmt.Printf("%s - %s - Calling %s %s, received %d\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, res.StatusCode)
+			p.logger.Info("Service request OK",
+				zap.String("reqID", reqID.String()),
+				zap.String("from", req.RemoteAddr),
+				zap.String("method", req.Method),
+				zap.String("host", req.URL.Host),
+				zap.String("path", req.URL.Path),
+				zap.Int("code", res.StatusCode),
+			)
+			//fmt.Printf("%s - %s - Calling %s %s, received %d\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = false
 			forward(resp, res)
 			defer res.Body.Close()

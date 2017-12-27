@@ -4,15 +4,20 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"go.uber.org/zap"
+
 	"github.com/gorilla/mux"
 )
 
 //ReloadConfig wraps config.reload
 func (m *Manager) ReloadConfig(w http.ResponseWriter, r *http.Request) {
+	m.logger.Info("Reloading config...")
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	err := m.Config.Reload()
 	if err != nil {
+		m.logger.Error("Unable to reload configuration",
+			zap.String("error", err.Error()))
 		http.Error(w, "Could not reload config", 500)
 		return
 	}
@@ -23,6 +28,7 @@ func (m *Manager) ReloadConfig(w http.ResponseWriter, r *http.Request) {
 			-frontend.tls
 			-frontend.logfile
 	*/
+	m.logger.Info("Config successfully reloaded")
 }
 
 //GetFrontends returns a list of currently enabled frontends
@@ -43,7 +49,7 @@ func (m *Manager) GetFrontend(w http.ResponseWriter, r *http.Request) {
 	defer m.mutex.Unlock()
 	vars := mux.Vars(r)
 	name := vars["name"]
-	if len(m.Config.Clusters[name].Servers) == 0 {
+	if m.Config.Frontends[name].Name == "" {
 		http.Error(w, "Resource Not Found", 404)
 		return
 	}
@@ -83,4 +89,13 @@ func (m *Manager) GetCluster(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Write(obj)
 	}
+}
+
+//LogLevel handles GET and POST request to hot modify log config
+func (m *Manager) LogLevel(w http.ResponseWriter, r *http.Request) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	vars := mux.Vars(r)
+	name := vars["name"]
+	m.loggers[name].ServeHTTP(w, r)
 }
