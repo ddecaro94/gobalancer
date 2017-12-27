@@ -33,6 +33,7 @@ func (m *Manager) Start() {
 			}
 		}(frontend)
 	}
+	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)
 	router.HandleFunc("/reload", m.ReloadConfig).Methods("GET")
 	router.HandleFunc("/frontends", m.GetFrontends).Methods("GET")
 	router.HandleFunc("/clusters", m.GetClusters).Methods("GET")

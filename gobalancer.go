@@ -1,6 +1,8 @@
 package main
 
 import (
+	_ "net/http/pprof"
+
 	"github.com/ddecaro94/gobalancer/api"
 	"github.com/ddecaro94/gobalancer/config"
 )
@@ -13,6 +15,5 @@ func main() {
 	}
 
 	manager := api.NewManager(c)
-
 	manager.Start()
 }

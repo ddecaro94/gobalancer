@@ -16,7 +16,7 @@ import (
 
 var tr, client = &http.Transport{
 	MaxIdleConns:       10,
-	IdleConnTimeout:    300 * time.Second,
+	IdleConnTimeout:    120 * time.Second,
 	DisableCompression: true,
 }, &http.Client{Transport: tr, Timeout: 120 * time.Second}
 
@@ -70,16 +70,16 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		switch {
 
 		case httperr != nil:
-			fmt.Printf("%s - Calling %s %s, error: %s - redirecting\n", reqID, req.URL.Host, req.URL.Path, httperr.Error())
+			fmt.Printf("%s - %s - Calling %s %s, error: %s - redirecting\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, httperr.Error())
 			repeat = true
 			//add url to forbidden
 			forbidden[host] = true
 			if iter >= ttl {
-				fmt.Printf("%s - No valid host found for service: %s \n", reqID, req.URL.Path)
+				fmt.Printf("%s - %s - No valid host found for service: %s \n", req.RemoteAddr, reqID, req.URL.Path)
 				http.Error(resp, "Service Unavailable", 503)
 			}
 		case codeToBounce(res.StatusCode, p.conf.Frontends[p.frontend].Bounce):
-			fmt.Printf("%s - Calling %s %s, received %d\n", reqID, req.URL.Host, req.URL.Path, res.StatusCode)
+			fmt.Printf("%s - %s - Calling %s %s, received %d\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = true
 			forbidden[host] = true
 			if iter >= ttl {
@@ -87,7 +87,7 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 				defer res.Body.Close()
 			}
 		default:
-			fmt.Printf("%s - Calling %s %s, received %d\n", reqID, req.URL.Host, req.URL.Path, res.StatusCode)
+			fmt.Printf("%s - %s - Calling %s %s, received %d\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = false
 			forward(resp, res)
 			defer res.Body.Close()
