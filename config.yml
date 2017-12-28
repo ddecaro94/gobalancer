@@ -1,0 +1,24 @@
+frontends:
+  main:
+    name: main
+    active: true
+    listen: ":9000"
+    tls: false
+    pool: pool1
+    bounce:
+    - 404
+    logfile: D:\Users\danie\Documents\Progetti\GO\gologs
+clusters:
+  pool1:
+    algorithm: weighted
+    servers:
+    - name: server1
+      scheme: http
+      host: ibmcollib01
+      port: '7800'
+      weight: 12
+    - name: server2
+      scheme: http
+      host: ibmcollib02
+      port: '7800'
+      weight: 5

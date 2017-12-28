@@ -3,11 +3,14 @@ package config
 import (
 	"encoding/json"
 	"io/ioutil"
+
+	"github.com/go-yaml/yaml"
 )
 
 //Config for the main program
 type Config struct {
 	file      string
+	format    string
 	Frontends map[string]Frontend `json:"frontends"`
 	Clusters  map[string]Cluster  `json:"clusters"`
 }
@@ -39,17 +42,43 @@ type Cluster struct {
 	Servers   []Server `json:"servers"`
 }
 
-//ReadConfig reads the configuration file returning the Config object
-func ReadConfig(path string) (c *Config, err error) {
+//ReadConfigJSON reads a json configuration file returning the Config object
+func ReadConfigJSON(path string) (c *Config, err error) {
 	var config Config
 	file, e := ioutil.ReadFile(path)
 	if e != nil {
 		return nil, e
 	}
+
 	if err := json.Unmarshal(file, &config); err != nil {
 		return nil, err
 	}
 	config.file = path
+	config.format = "json"
+	cdf := 0
+	for key, cluster := range config.Clusters {
+		for _, server := range cluster.Servers {
+			cdf += server.Weight
+		}
+		cluster.CDF = cdf
+		config.Clusters[key] = cluster
+	}
+	return &config, nil
+}
+
+//ReadConfigYAML reads a yaml configuration file returning the Config object
+func ReadConfigYAML(path string) (c *Config, err error) {
+	var config Config
+	file, e := ioutil.ReadFile(path)
+	if e != nil {
+		return nil, e
+	}
+
+	if err := yaml.Unmarshal(file, &config); err != nil {
+		return nil, err
+	}
+	config.file = path
+	config.format = "yaml"
 	cdf := 0
 	for key, cluster := range config.Clusters {
 		for _, server := range cluster.Servers {
@@ -63,9 +92,20 @@ func ReadConfig(path string) (c *Config, err error) {
 
 //Reload reloads config file
 func (c *Config) Reload() (err error) {
-	new, err := ReadConfig(c.file)
-	if err != nil {
-		return err
+	var (
+		new *Config
+	)
+	if c.format == "json" {
+		new, err = ReadConfigJSON(c.file)
+		if err != nil {
+			return err
+		}
+	}
+	if c.format == "yaml" {
+		new, err = ReadConfigYAML(c.file)
+		if err != nil {
+			return err
+		}
 	}
 
 	c.Frontends = new.Frontends

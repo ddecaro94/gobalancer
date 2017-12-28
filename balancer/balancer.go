@@ -109,7 +109,6 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			forbidden[host] = true
 			if iter >= ttl {
 				forward(resp, res)
-				defer res.Body.Close()
 			}
 		default:
 			p.logger.Info("Service request OK",
@@ -123,7 +122,6 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			//fmt.Printf("%s - %s - Calling %s %s, received %d\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = false
 			forward(resp, res)
-			defer res.Body.Close()
 		}
 	}
 }
@@ -159,6 +157,7 @@ func forward(w http.ResponseWriter, res *http.Response) {
 		}
 	}
 	_, err := io.Copy(w, res.Body)
+	defer res.Body.Close()
 	if err != nil {
 		panic(err)
 	}
