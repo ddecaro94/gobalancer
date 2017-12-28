@@ -82,7 +82,7 @@ func (m *Manager) PatchFrontend(w http.ResponseWriter, r *http.Request) {
 	if m.Config.Frontends[name].Active {
 		switch status.Active {
 		case false:
-			m.proxies[name].Shutdown(context.Background())
+			m.Config.Frontends[name].Proxy.Shutdown(context.Background())
 			m.Config.Frontends[name].Active = false
 			w.Write([]byte("Frontend successfully stopped"))
 		case true:
@@ -96,10 +96,10 @@ func (m *Manager) PatchFrontend(w http.ResponseWriter, r *http.Request) {
 			var err error
 			go func(frontend *config.Frontend) {
 				if frontend.TLS.Enabled {
-					err = m.proxies[frontend.Name].ListenAndServeTLS(frontend.TLS.Cert, frontend.TLS.Key)
+					err = m.Config.Frontends[name].Proxy.ListenAndServeTLS(frontend.TLS.Cert, frontend.TLS.Key)
 
 				} else {
-					err = m.proxies[frontend.Name].ListenAndServe()
+					err = m.Config.Frontends[name].Proxy.ListenAndServe()
 				}
 				if err != nil {
 					m.logger.Warn("Frontend has been stopped",

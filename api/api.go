@@ -18,7 +18,6 @@ import (
 type Manager struct {
 	Config  *config.Config
 	Server  *http.Server
-	proxies map[string]*http.Server
 	loggers map[string]*zap.AtomicLevel
 	logger  *zap.Logger
 	mutex   *sync.Mutex
@@ -83,7 +82,7 @@ func (m *Manager) Start() {
 			logger, _ := zapc.Build()
 
 			m.loggers[frontend.Name] = &atom
-			m.proxies[frontend.Name] = &http.Server{
+			frontend.Proxy = &http.Server{
 				Addr:         frontend.Listen,
 				Handler:      balancer.New(m.Config, logger, frontend.Name),
 				TLSConfig:    tlsConf,
@@ -94,10 +93,10 @@ func (m *Manager) Start() {
 			if frontend.Active {
 				var err error
 				if frontend.TLS.Enabled {
-					err = m.proxies[frontend.Name].ListenAndServeTLS(frontend.TLS.Cert, frontend.TLS.Key)
+					err = frontend.Proxy.ListenAndServeTLS(frontend.TLS.Cert, frontend.TLS.Key)
 
 				} else {
-					err = m.proxies[frontend.Name].ListenAndServe()
+					err = frontend.Proxy.ListenAndServe()
 				}
 				if err != nil {
 					m.logger.Warn("Frontend has been stopped",
@@ -122,10 +121,9 @@ func (m *Manager) Start() {
 
 //NewManager creates a management server from a configuration object
 func NewManager(c *config.Config) (m *Manager) {
-	servers := make(map[string]*http.Server)
 	loggers := make(map[string]*zap.AtomicLevel)
 
-	man := &Manager{c, &http.Server{Addr: ":9999"}, servers, loggers, &zap.Logger{}, &sync.Mutex{}}
+	man := &Manager{c, &http.Server{Addr: ":9999"}, loggers, &zap.Logger{}, &sync.Mutex{}}
 
 	return man
 }
