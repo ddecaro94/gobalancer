@@ -11,7 +11,7 @@ import (
 func main() {
 	var c *config.Config
 	var errJSON, errYAML error
-	c, errJSON = config.ReadConfigJSON("./config.yml")
+	c, errJSON = config.ReadConfigJSON("./config.json")
 	if errJSON != nil {
 		log.Println("Not a valid JSON config. Tying to read as YAML...")
 		c, errYAML = config.ReadConfigYAML("./config.yml")
@@ -21,6 +21,7 @@ func main() {
 		}
 		log.Println("Read config in yaml format.")
 	}
+	log.Println("Read config in json format.")
 
 	manager := api.NewManager(c)
 	manager.Start()

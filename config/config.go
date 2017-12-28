@@ -7,12 +7,19 @@ import (
 	"github.com/go-yaml/yaml"
 )
 
+//TLS contains the frontend TLS settings
+type TLS struct {
+	Enabled bool   `json:"enabled"`
+	Key     string `json:"key"`
+	Cert    string `json:"cert"`
+}
+
 //Config for the main program
 type Config struct {
 	file      string
 	format    string
-	Frontends map[string]Frontend `json:"frontends"`
-	Clusters  map[string]Cluster  `json:"clusters"`
+	Frontends map[string]*Frontend `json:"frontends"`
+	Clusters  map[string]*Cluster  `json:"clusters"`
 }
 
 //A Frontend is the proxy interface
@@ -20,10 +27,10 @@ type Frontend struct {
 	Name    string `json:"name"`
 	Active  bool   `json:"active"`
 	Listen  string `json:"listen"`
-	TLS     bool   `json:"tls"`
+	TLS     TLS    `json:"tls,omitempty"`
 	Pool    string `json:"pool"`
-	Bounce  []int  `json:"bounce"`
-	Logfile string `json:"logfile"`
+	Bounce  []int  `json:"bounce,omitempty"`
+	Logfile string `json:"logfile,omitempty"`
 }
 
 //A Server represents a service provider listener
@@ -32,13 +39,13 @@ type Server struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 	Port   string `json:"port"`
-	Weight int    `json:"weight"`
+	Weight int    `json:"weight,omitempty"`
 }
 
 //A Cluster aggregates more Servers into a pool
 type Cluster struct {
 	Algorithm string   `json:"algorithm"`
-	CDF       int      //cumulative density function (sum of weights)
+	CDF       int      `json:"-"` //cumulative density function (sum of weights)
 	Servers   []Server `json:"servers"`
 }
 
@@ -138,9 +145,4 @@ func (c *Cluster) Update(s Server) (updated int) {
 		}
 	}
 	return count
-}
-
-//SetCDF sets the cumulative density function
-func (c *Cluster) SetCDF(cdf int) {
-	c.CDF = cdf
 }

@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"go.uber.org/zap"
 
+	"github.com/ddecaro94/gobalancer/config"
 	"github.com/gorilla/mux"
 )
 
@@ -59,6 +61,62 @@ func (m *Manager) GetFrontend(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Write(obj)
 	}
+}
+
+//PatchFrontend updates a specific frontend's properties
+func (m *Manager) PatchFrontend(w http.ResponseWriter, r *http.Request) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	vars := mux.Vars(r)
+	name := vars["name"]
+	var status *config.Frontend
+	if m.Config.Frontends[name].Name == "" {
+		http.Error(w, "Resource Not Found", 404)
+		return
+	}
+	err := json.NewDecoder(r.Body).Decode(&status)
+	if err != nil {
+		http.Error(w, "Bad Request", 400)
+		return
+	}
+	if m.Config.Frontends[name].Active {
+		switch status.Active {
+		case false:
+			m.proxies[name].Shutdown(context.Background())
+			m.Config.Frontends[name].Active = false
+			w.Write([]byte("Frontend successfully stopped"))
+		case true:
+			w.Write([]byte("Already active"))
+		default:
+			http.Error(w, "Bad Request", 400)
+		}
+	} else {
+		switch status.Active {
+		case true:
+			var err error
+			go func(frontend *config.Frontend) {
+				if frontend.TLS.Enabled {
+					err = m.proxies[frontend.Name].ListenAndServeTLS(frontend.TLS.Cert, frontend.TLS.Key)
+
+				} else {
+					err = m.proxies[frontend.Name].ListenAndServe()
+				}
+				if err != nil {
+					m.logger.Warn("Frontend has been stopped",
+						zap.String("name", frontend.Name))
+				}
+			}(m.Config.Frontends[name])
+			m.Config.Frontends[name].Active = true
+			m.logger.Info("Frontend has been started",
+				zap.String("name", m.Config.Frontends[name].Name))
+			w.Write([]byte("Frontend successfully started"))
+		case false:
+			w.Write([]byte("Already stopped"))
+		default:
+			http.Error(w, "Bad Request", 400)
+		}
+	}
+
 }
 
 //GetClusters returns a list of currently available clusters

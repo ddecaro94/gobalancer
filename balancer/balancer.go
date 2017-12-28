@@ -40,6 +40,7 @@ func New(c *config.Config, logger *zap.Logger, frontend string) (p *Balancer) {
 
 func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	iter, repeat, ttl, path, body := 0, true, len(p.conf.Clusters[p.conf.Frontends[p.frontend].Pool].Servers), req.RequestURI, []byte{}
+
 	reqID, err := uuid.NewUUID()
 	forbidden := make(map[string]bool)
 	bouncedCodes := p.conf.Frontends[p.frontend].Bounce
@@ -163,7 +164,7 @@ func forward(w http.ResponseWriter, res *http.Response) {
 	}
 }
 
-func getWeightedIndex(cluster config.Cluster) (index int) {
+func getWeightedIndex(cluster *config.Cluster) (index int) {
 	r := random.Intn(cluster.CDF)
 	for i, s := range cluster.Servers {
 		r -= s.Weight

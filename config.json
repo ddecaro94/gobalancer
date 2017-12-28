@@ -4,9 +4,13 @@
             "name" : "main",
             "active" : true,
             "listen" : ":9000",
-            "tls" : false,
+            "tls" : {
+                "enabled" : true,
+                "key" : ".\\gobalancer.key",
+                "cert" : ".\\gobalancer.crt"
+            },
             "pool" : "pool1",
-            "bounce" : [404],
+            "bounce" : [],
             "logfile" : "D:\\Users\\danie\\Documents\\Progetti\\GO\\gologs"
         }
     }
