@@ -27,15 +27,16 @@ type Config struct {
 
 //A Frontend is the proxy interface
 type Frontend struct {
-	Name    string       `json:"name"`
-	Active  bool         `json:"active"`
-	Listen  string       `json:"listen"`
-	TLS     TLS          `json:"tls,omitempty"`
-	Pool    string       `json:"pool"`
-	Bounce  []int        `json:"bounce,omitempty"`
-	Logfile string       `json:"logfile,omitempty"`
-	Proxy   *http.Server `json:"-"`
-	Logger  *zap.Logger  `json:"-"`
+	Name     string           `json:"name"`
+	Active   bool             `json:"active"`
+	Listen   string           `json:"listen"`
+	TLS      TLS              `json:"tls,omitempty"`
+	Pool     string           `json:"pool"`
+	Bounce   []int            `json:"bounce,omitempty"`
+	Logfile  string           `json:"logfile,omitempty"`
+	Proxy    *http.Server     `json:"-"`
+	Logger   *zap.Logger      `json:"-"`
+	LogLevel *zap.AtomicLevel `json:"-"`
 }
 
 //A Server represents a service provider listener

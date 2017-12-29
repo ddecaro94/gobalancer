@@ -16,11 +16,10 @@ import (
 
 //A Manager represents the management server object
 type Manager struct {
-	Config  *config.Config
-	Server  *http.Server
-	loggers map[string]*zap.AtomicLevel
-	logger  *zap.Logger
-	mutex   *sync.Mutex
+	Config *config.Config
+	Server *http.Server
+	logger *zap.Logger
+	mutex  *sync.Mutex
 }
 
 //Start powers on the management api server
@@ -79,9 +78,14 @@ func (m *Manager) Start() {
 				OutputPaths:      []string{"stderr", frontend.Logfile},
 				ErrorOutputPaths: []string{"stderr", frontend.Logfile},
 			}
-			logger, _ := zapc.Build()
+			logger, err := zapc.Build()
+			if err != nil {
+				m.logger.Error("Could not start frontend",
+					zap.String("name", frontend.Name),
+					zap.String("error", err.Error()))
+				return
+			}
 
-			m.loggers[frontend.Name] = &atom
 			frontend.Proxy = &http.Server{
 				Addr:         frontend.Listen,
 				Handler:      balancer.New(m.Config, logger, frontend.Name),
@@ -90,8 +94,11 @@ func (m *Manager) Start() {
 				WriteTimeout: 10 * time.Second,
 				IdleTimeout:  120 * time.Second,
 			}
+			frontend.LogLevel = &atom
 			if frontend.Active {
 				var err error
+				m.logger.Info("Frontend starting up...",
+					zap.String("name", frontend.Name))
 				if frontend.TLS.Enabled {
 					err = frontend.Proxy.ListenAndServeTLS(frontend.TLS.Cert, frontend.TLS.Key)
 
@@ -104,8 +111,7 @@ func (m *Manager) Start() {
 				}
 			}
 		}(frontend)
-		m.logger.Info("Frontend has been started",
-			zap.String("name", frontend.Name))
+
 	}
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)
 	router.HandleFunc("/reload", m.ReloadConfig).Methods("GET")
@@ -121,9 +127,8 @@ func (m *Manager) Start() {
 
 //NewManager creates a management server from a configuration object
 func NewManager(c *config.Config) (m *Manager) {
-	loggers := make(map[string]*zap.AtomicLevel)
 
-	man := &Manager{c, &http.Server{Addr: ":9999"}, loggers, &zap.Logger{}, &sync.Mutex{}}
+	man := &Manager{c, &http.Server{Addr: ":9999"}, &zap.Logger{}, &sync.Mutex{}}
 
 	return man
 }

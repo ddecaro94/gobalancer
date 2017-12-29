@@ -122,7 +122,17 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			)
 			//fmt.Printf("%s - %s - Calling %s %s, received %d\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = false
-			forward(resp, res)
+			e := forward(resp, res)
+			if e != nil {
+				p.logger.Error("Error occurred during response",
+					zap.String("reqID", reqID.String()),
+					zap.String("from", req.RemoteAddr),
+					zap.String("method", req.Method),
+					zap.String("host", req.URL.Host),
+					zap.String("path", req.URL.Path),
+					zap.String("error", e.Error()),
+				)
+			}
 		}
 	}
 }
@@ -151,17 +161,16 @@ func codeToBounce(code int, list []int) bool {
 	return false
 }
 
-func forward(w http.ResponseWriter, res *http.Response) {
+func forward(w http.ResponseWriter, res *http.Response) (err error) {
 	for name, header := range res.Header {
 		for _, val := range header {
 			w.Header().Set(name, val)
 		}
 	}
-	_, err := io.Copy(w, res.Body)
+	_, e := io.Copy(w, res.Body)
 	defer res.Body.Close()
-	if err != nil {
-		panic(err)
-	}
+
+	return e
 }
 
 func getWeightedIndex(cluster *config.Cluster) (index int) {

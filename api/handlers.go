@@ -95,6 +95,8 @@ func (m *Manager) PatchFrontend(w http.ResponseWriter, r *http.Request) {
 		case true:
 			var err error
 			go func(frontend *config.Frontend) {
+				m.logger.Info("Frontend starting up...",
+					zap.String("name", m.Config.Frontends[name].Name))
 				if frontend.TLS.Enabled {
 					err = m.Config.Frontends[name].Proxy.ListenAndServeTLS(frontend.TLS.Cert, frontend.TLS.Key)
 
@@ -107,8 +109,7 @@ func (m *Manager) PatchFrontend(w http.ResponseWriter, r *http.Request) {
 				}
 			}(m.Config.Frontends[name])
 			m.Config.Frontends[name].Active = true
-			m.logger.Info("Frontend has been started",
-				zap.String("name", m.Config.Frontends[name].Name))
+
 			w.Write([]byte("Frontend successfully started"))
 		case false:
 			w.Write([]byte("Already stopped"))
@@ -155,5 +156,5 @@ func (m *Manager) LogLevel(w http.ResponseWriter, r *http.Request) {
 	defer m.mutex.Unlock()
 	vars := mux.Vars(r)
 	name := vars["name"]
-	m.loggers[name].ServeHTTP(w, r)
+	m.Config.Frontends[name].LogLevel.ServeHTTP(w, r)
 }
