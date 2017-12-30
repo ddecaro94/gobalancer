@@ -39,9 +39,19 @@ func New(c *config.Config, logger *zap.Logger, frontend string) (p *Balancer) {
 }
 
 func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	begin := time.Now()
+	reqID, err := uuid.NewUUID()
+
+	p.logger.Debug("Received request",
+		zap.String("reqID", reqID.String()),
+		zap.String("from", req.RemoteAddr),
+		zap.String("method", req.Method),
+		zap.String("host", req.URL.Host),
+		zap.String("path", req.URL.Path),
+	)
+
 	iter, repeat, ttl, path, body := 0, true, len(p.conf.Clusters[p.conf.Frontends[p.frontend].Pool].Servers), req.RequestURI, []byte{}
 
-	reqID, err := uuid.NewUUID()
 	forbidden := make(map[string]bool)
 	bouncedCodes := p.conf.Frontends[p.frontend].Bounce
 	if err != nil {
@@ -68,6 +78,7 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		if len(bouncedCodes) != 0 {
 			req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 		}
+		reqTime := time.Now()
 		res, httperr := client.Do(req)
 
 		switch {
@@ -119,6 +130,7 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 				zap.String("host", req.URL.Host),
 				zap.String("path", req.URL.Path),
 				zap.Int("code", res.StatusCode),
+				zap.Duration("requestDuration", time.Since(reqTime)),
 			)
 			//fmt.Printf("%s - %s - Calling %s %s, received %d\n", req.RemoteAddr, reqID, req.URL.Host, req.URL.Path, res.StatusCode)
 			repeat = false
@@ -131,6 +143,16 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 					zap.String("host", req.URL.Host),
 					zap.String("path", req.URL.Path),
 					zap.String("error", e.Error()),
+				)
+			} else {
+				p.logger.Debug("End reply",
+					zap.String("reqID", reqID.String()),
+					zap.String("from", req.RemoteAddr),
+					zap.String("method", req.Method),
+					zap.String("host", req.URL.Host),
+					zap.String("path", req.URL.Path),
+					zap.Int("code", res.StatusCode),
+					zap.Duration("totalElapsed", time.Since(begin)),
 				)
 			}
 		}

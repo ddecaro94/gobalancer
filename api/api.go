@@ -52,7 +52,7 @@ func (m *Manager) Start() {
 	}
 
 	m.Server.Handler = router
-	atomM := zap.NewAtomicLevelAt(zapcore.InfoLevel)
+	atomM := zap.NewAtomicLevelAt(zapcore.DebugLevel)
 
 	zapcM := zap.Config{
 		Level:            atomM,
@@ -68,7 +68,7 @@ func (m *Manager) Start() {
 	for _, frontend := range m.Config.Frontends {
 		go func(frontend *config.Frontend) {
 
-			atom := zap.NewAtomicLevelAt(zapcore.InfoLevel)
+			atom := zap.NewAtomicLevelAt(zapcore.DebugLevel)
 
 			zapc := zap.Config{
 				Level:            atom,
