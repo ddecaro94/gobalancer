@@ -98,7 +98,10 @@ func (m *Manager) Start() {
 			if frontend.Active {
 				var err error
 				m.logger.Info("Frontend starting up...",
-					zap.String("name", frontend.Name))
+					zap.String("name", frontend.Name),
+					zap.String("Addr", frontend.Listen),
+					zap.Bool("HTTPS", frontend.TLS.Enabled),
+				)
 				if frontend.TLS.Enabled {
 					err = frontend.Proxy.ListenAndServeTLS(frontend.TLS.Cert, frontend.TLS.Key)
 

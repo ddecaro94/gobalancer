@@ -58,9 +58,10 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		panic(err)
 	}
 	if len(bouncedCodes) != 0 {
-		//read all request body because making a client request closes the body
-		body, _ = ioutil.ReadAll(req.Body)
-		req.Body.Close()
+		//in case bounce is activated, replace reader with nopcloser in order to not close the request body
+		b := req.Body
+		defer req.Body.Close()
+		req.Body = ioutil.NopCloser(b)
 	}
 	for repeat && iter < ttl {
 		iter++
