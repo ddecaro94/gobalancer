@@ -15,26 +15,29 @@ import (
 	"github.com/google/uuid"
 )
 
-var tr, client = &http.Transport{
-	MaxIdleConns:       10,
-	IdleConnTimeout:    120 * time.Second,
-	DisableCompression: true,
-}, &http.Client{Transport: tr, Timeout: 120 * time.Second}
-
 var random = rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
 
 //A Balancer stores structures used to compute the host to be used at runtime
 type Balancer struct {
-	index    int
-	mutex    *sync.Mutex
-	conf     *config.Config
-	logger   *zap.Logger
-	frontend string
+	index     int
+	frontend  string
+	mutex     *sync.Mutex
+	conf      *config.Config
+	logger    *zap.Logger
+	transport *http.Transport
+	client    *http.Client
 }
 
 //New returns a Balancer instance
 func New(c *config.Config, logger *zap.Logger, frontend string) (p *Balancer) {
-	b := &Balancer{0, &sync.Mutex{}, c, logger, frontend}
+
+	tr := &http.Transport{
+		MaxIdleConns:       10,
+		IdleConnTimeout:    120 * time.Second,
+		DisableCompression: true,
+	}
+	client := &http.Client{Transport: tr, Timeout: 120 * time.Second}
+	b := &Balancer{0, frontend, &sync.Mutex{}, c, logger, tr, client}
 	return b
 }
 
@@ -49,8 +52,8 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		zap.String("host", req.URL.Host),
 		zap.String("path", req.URL.Path),
 	)
-
-	iter, repeat, ttl, path, body := 0, true, len(p.conf.Clusters[p.conf.Frontends[p.frontend].Pool].Servers), req.RequestURI, []byte{}
+	servers := p.conf.Clusters[p.conf.Frontends[p.frontend].Pool].Servers
+	iter, repeat, ttl, path, body := 0, true, len(servers), req.RequestURI, []byte{}
 
 	forbidden := make(map[string]bool)
 	bouncedCodes := p.conf.Frontends[p.frontend].Bounce
@@ -80,7 +83,7 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 		}
 		reqTime := time.Now()
-		res, httperr := client.Do(req)
+		res, httperr := p.client.Do(req)
 
 		switch {
 
@@ -163,7 +166,6 @@ func (p *Balancer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 //Next returns the next address according to the balancing algorithm
 func (p *Balancer) Next() (server config.Server) {
 	cluster := p.conf.Clusters[p.conf.Frontends[p.frontend].Pool]
-	p.mutex.Lock()
 	switch cluster.Algorithm {
 	case "roundrobin":
 		p.index = (p.index + 1) % len(cluster.Servers)
@@ -171,7 +173,6 @@ func (p *Balancer) Next() (server config.Server) {
 	case "weighted":
 		p.index = getWeightedIndex(cluster)
 	}
-	defer p.mutex.Unlock()
 	return cluster.Servers[p.index]
 }
 
